@@ -129,3 +129,7 @@ export function AdminDashboard() {
     </PageWrapper>
   );
 }
+
+export * from './AddTrip';
+export * from './ManageTrips';
+export * from './EditTrip';

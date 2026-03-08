@@ -7,6 +7,7 @@ import { setupAuthListener } from '@/services/authService';
 
 export function RootLayout() {
   const location = useLocation();
+  const hideFooter = location.pathname === '/search';
 
   useEffect(() => {
     const unsubscribe = setupAuthListener();
@@ -21,7 +22,7 @@ export function RootLayout() {
           <Outlet key={location.pathname} />
         </AnimatePresence>
       </main>
-      <Footer />
+      {!hideFooter && <Footer />}
     </div>
   );
 }

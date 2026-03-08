@@ -1,9 +1,181 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Container } from "@/layouts/Container";
 import { Button } from "@/components/ui/Button";
-import { MapPin, Calendar, Wallet, Sparkles, Navigation, Loader2, AlertCircle } from "lucide-react";
+import { MapPin, Calendar, Wallet, Sparkles, Navigation, Loader2, AlertCircle, Clock } from "lucide-react";
 import { generateTrip } from "@/services/aiTripService";
+import ReactMarkdown from "react-markdown";
+
+interface ItineraryDay {
+  dayStr: string;
+  title: string;
+  content: string;
+}
+
+interface ParsedItinerary {
+  intro: string;
+  days: ItineraryDay[];
+}
+
+function parseItinerary(markdown: string): ParsedItinerary {
+  const result: ParsedItinerary = { intro: "", days: [] };
+  const lines = markdown.split('\n');
+  let currentDay: ItineraryDay | null = null;
+
+  // Regex matches things like: "Day 1", "Day 01", "**Day 1**:", "### Day 2 - Activity" 
+  const dayRegex = /^(?:#{1,6}\s*|\*\*\s*|\-\s*\*\*\s*)?(Day\s+\d+)(?:[:\-\|]\s*|\s+-\s+|\s*)(.*?)(?:\*\*|\*|:)?$/i;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = line.trim().match(dayRegex);
+
+    if (match) {
+      currentDay = {
+        dayStr: match[1].trim(),
+        title: match[2] ? match[2].trim() : "",
+        content: ""
+      };
+      result.days.push(currentDay);
+    } else {
+      if (currentDay) {
+        currentDay.content += line + '\n';
+      } else {
+        result.intro += line + '\n';
+      }
+    }
+  }
+
+  return result;
+}
+
+// Helper: contextual icons
+function getActivityIcon(title: string) {
+  const lowerTitle = title.toLowerCase();
+  if (lowerTitle.includes("beach")) return "🏝️";
+  if (lowerTitle.includes("breakfast") || lowerTitle.includes("lunch") || lowerTitle.includes("dinner") || lowerTitle.includes("restaurant") || lowerTitle.includes("cafe") || lowerTitle.includes("food")) return "🍽️";
+  if (lowerTitle.includes("temple") || lowerTitle.includes("church") || lowerTitle.includes("monument") || lowerTitle.includes("fort")) return "🏛️";
+  if (lowerTitle.includes("market") || lowerTitle.includes("shopping") || lowerTitle.includes("mall")) return "🛍️";
+  if (lowerTitle.includes("airport") || lowerTitle.includes("flight") || lowerTitle.includes("train") || lowerTitle.includes("travel")) return "✈️";
+  if (lowerTitle.includes("hotel") || lowerTitle.includes("check-in") || lowerTitle.includes("resort")) return "🏨";
+  if (lowerTitle.includes("sunset") || lowerTitle.includes("sunrise") || lowerTitle.includes("viewpoint")) return "🌅";
+  if (lowerTitle.includes("party") || lowerTitle.includes("club") || lowerTitle.includes("nightlife")) return "🎉";
+  return "📍";
+}
+
+interface Activity {
+  time?: string;
+  title: string;
+  description: string;
+}
+
+function parseActivities(markdown: string): Activity[] {
+  const lines = markdown.split('\n');
+  const activities: Activity[] = [];
+  let currentActivity: Activity | null = null;
+
+  // Regex matches: "- **10:00 AM: Anjuna Beach**", "**Morning - Sightseeing**", or "* 10:00 AM: Beach"
+  // Group 1: Time (optional), Group 2: Title/Location
+  const activityRegex = /^(?:[\*\-]\s*)?(?:\*\*)?(?:([^:\*]+?)(?:[:\-]\s+))(.*?)(?:\*\*)?(.*?)$/i;
+  const genericBoldRegex = /^(?:[\*\-]\s*)?\*\*(.*?)\*\*(.*?)$/i;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    let match = trimmed.match(activityRegex);
+    if (!match) match = trimmed.match(genericBoldRegex);
+
+    if (match) {
+      if (currentActivity) activities.push(currentActivity);
+
+      if (match.length >= 4) {
+        // Has time and title
+        currentActivity = {
+          time: match[1].trim(),
+          title: match[2].trim(),
+          description: match[3] ? match[3].trim() : ""
+        };
+      } else if (match.length === 3) {
+        // Just bold title
+        currentActivity = {
+          title: match[1].trim(),
+          description: match[2] ? match[2].trim() : ""
+        };
+      }
+    } else {
+      if (currentActivity) {
+        currentActivity.description += "\n" + trimmed;
+      } else {
+        // Loose text before any bullet point
+        activities.push({
+          title: "Overview",
+          description: trimmed
+        });
+      }
+    }
+  }
+  if (currentActivity) activities.push(currentActivity);
+
+  return activities;
+}
+
+function ActivityList({ content }: { content: string }) {
+  const activities = parseActivities(content);
+
+  if (activities.length === 0) {
+    return (
+      <div className="prose prose-sm md:prose-base dark:prose-invert max-w-none prose-p:text-muted-foreground prose-li:text-muted-foreground">
+        <ReactMarkdown>{content}</ReactMarkdown>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4 mt-6">
+      {activities.map((activity, idx) => {
+        // Fallback for loose markdown text
+        if (activity.title === "Overview" && !activity.time) {
+          return (
+            <div key={idx} className="text-muted-foreground text-sm md:text-base leading-relaxed mb-4 space-y-2">
+              <ReactMarkdown>{activity.description.replace(/[*#]/g, '').trim()}</ReactMarkdown>
+            </div>
+          );
+        }
+
+        const icon = getActivityIcon(activity.title);
+
+        return (
+          <div key={idx} className="group bg-card/30 backdrop-blur-md border border-border/40 shadow-sm rounded-xl p-4 sm:p-5 hover:bg-card/50 transition-all duration-300 w-full flex flex-col sm:flex-row sm:items-start gap-4">
+            {/* Contextual Icon Container */}
+            <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 bg-background/80 border border-border/50 rounded-full flex items-center justify-center text-xl sm:text-2xl text-foreground">
+              {icon}
+            </div>
+
+            <div className="flex-1 space-y-3">
+              <div className="flex flex-col items-start gap-1.5">
+                {activity.time && (
+                  <span className="inline-flex shrink-0 items-center justify-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-muted text-muted-foreground uppercase tracking-widest whitespace-nowrap">
+                    <Clock className="w-3.5 h-3.5" />
+                    {activity.time.replace(/[*#]/g, '').trim()}
+                  </span>
+                )}
+                <h5 className="font-semibold text-foreground text-base md:text-lg tracking-tight leading-snug mt-1">
+                  {activity.title.replace(/[*#]/g, '').replace(/^-\s*/, '').trim()}
+                </h5>
+              </div>
+
+              {activity.description && activity.description.trim() !== "[]" && (
+                <div className="prose prose-sm md:prose-base dark:prose-invert max-w-prose text-muted-foreground leading-relaxed space-y-2 text-sm md:text-base">
+                  <ReactMarkdown>{activity.description.replace(/^[-\s]*|:\s*$/g, '').trim()}</ReactMarkdown>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export function AIGeneratorPreview() {
   const [destination, setDestination] = useState("Goa");
@@ -14,6 +186,8 @@ export function AIGeneratorPreview() {
   const [showResult, setShowResult] = useState(false);
   const [aiResult, setAiResult] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const parsedItinerary = useMemo(() => parseItinerary(aiResult), [aiResult]);
 
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -33,17 +207,17 @@ export function AIGeneratorPreview() {
   };
 
   return (
-    <section className="py-24 bg-muted/30 relative overflow-hidden">
+    <section className="py-16 sm:py-24 bg-muted/30 relative overflow-hidden">
       <Container>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+        <div className="flex flex-col max-w-4xl mx-auto gap-12 px-2 sm:px-6 w-full">
 
-          {/* Left Column: Form Section */}
+          {/* Top Section: Form */}
           <motion.div
-            initial={{ opacity: 0, x: -30 }}
-            whileInView={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="flex flex-col max-w-xl"
+            className="flex flex-col w-full"
           >
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary w-fit border border-primary/20 mb-6">
               <Sparkles className="w-4 h-4" />
@@ -59,7 +233,6 @@ export function AIGeneratorPreview() {
             </p>
 
             <div className="bg-card p-6 sm:p-8 rounded-2xl shadow-sm border border-border space-y-6 relative group">
-              {/* Subtle container glow */}
               <div className="absolute -inset-0.5 bg-gradient-to-tr from-primary/10 to-blue-500/10 rounded-2xl blur opacity-0 group-hover:opacity-100 transition duration-500 pointer-events-none" />
 
               <div className="space-y-5 relative z-10">
@@ -130,10 +303,9 @@ export function AIGeneratorPreview() {
             </div>
           </motion.div>
 
-          {/* Right Column: Preview Panel */}
-          <div className="relative h-full min-h-[500px] flex items-center justify-center">
-            {/* Background decorative elements */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full max-w-[400px] max-h-[400px] bg-primary/20 blur-[100px] rounded-full opacity-50 pointer-events-none" />
+          {/* Bottom Section: Timeline Preview */}
+          <div className="relative flex flex-col justify-start w-full">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[600px] h-[600px] bg-primary/10 blur-[120px] rounded-full opacity-50 pointer-events-none" />
 
             <AnimatePresence mode="wait">
               {error ? (
@@ -142,7 +314,7 @@ export function AIGeneratorPreview() {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="relative z-10 w-full max-w-md bg-destructive/10 border border-destructive/20 p-6 rounded-2xl flex flex-col items-center text-center backdrop-blur-sm"
+                  className="relative z-10 w-full bg-destructive/10 border border-destructive/20 p-6 rounded-2xl flex flex-col items-center text-center backdrop-blur-sm mt-8"
                 >
                   <AlertCircle className="w-12 h-12 text-destructive mb-3" />
                   <h3 className="text-lg font-bold text-destructive mb-2">Generation Failed</h3>
@@ -154,7 +326,7 @@ export function AIGeneratorPreview() {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95, filter: "blur(10px)" }}
-                  className="text-center relative z-10 p-8 border-2 border-dashed border-border/50 rounded-3xl w-full max-w-sm backdrop-blur-sm"
+                  className="text-center relative z-10 p-12 border-2 border-dashed border-border/50 rounded-3xl w-full backdrop-blur-sm mt-8"
                 >
                   <Navigation className="w-16 h-16 mx-auto text-muted-foreground/30 mb-4" />
                   <p className="text-muted-foreground font-medium">Your generated itinerary will appear here</p>
@@ -162,31 +334,74 @@ export function AIGeneratorPreview() {
               ) : (
                 <motion.div
                   key="result"
-                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                  className="relative z-10 w-full max-w-md bg-card/80 backdrop-blur-xl border border-border shadow-2xl rounded-3xl overflow-hidden"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5 }}
+                  className="relative z-10 w-full mt-8"
                 >
-                  {/* Glowing header */}
-                  <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 border-b border-border/50">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Sparkles className="w-5 h-5 text-primary" />
-                      <h3 className="font-bold text-lg">AI Generated Trip</h3>
+                  {/* Top Header Card */}
+                  <div className="bg-card/80 backdrop-blur-xl border border-border shadow-lg rounded-2xl p-6 mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sparkles className="w-5 h-5 text-primary" />
+                        <h3 className="font-bold text-xl">AI Generated Trip</h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground">Your perfect plan awaits.</p>
                     </div>
                     <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                      <span className="bg-background/50 px-2 py-1 rounded-md">{destination}</span>
-                      <span className="bg-background/50 px-2 py-1 rounded-md">{duration}</span>
-                      <span className="bg-background/50 px-2 py-1 rounded-md">{budget}</span>
+                      <span className="bg-background/80 px-3 py-1.5 rounded-lg font-medium border border-border/50">{destination}</span>
+                      <span className="bg-background/80 px-3 py-1.5 rounded-lg font-medium border border-border/50">{duration}</span>
                     </div>
                   </div>
 
-                  <div className="p-6">
-                    <div className="whitespace-pre-wrap text-sm text-foreground max-h-[350px] overflow-y-auto pr-2 custom-scrollbar leading-relaxed">
-                      {aiResult ? aiResult : (
-                        <p className="italic text-muted-foreground">No itinerary data could be extracted.</p>
+                  {parsedItinerary?.days && parsedItinerary.days.length > 0 ? (
+                    <div className="space-y-10 sm:space-y-12 w-full pb-12">
+                      {parsedItinerary.intro?.trim() && (
+                        <div className="w-full">
+                          <div className="bg-card/40 backdrop-blur-sm border border-border border-dashed rounded-xl sm:rounded-2xl p-4 sm:p-5 text-sm sm:text-base text-muted-foreground prose prose-sm dark:prose-invert max-w-none prose-p:last:mb-0 w-full overflow-hidden">
+                            <ReactMarkdown>
+                              {parsedItinerary.intro}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
                       )}
+
+                      {parsedItinerary.days.map((day, idx) => (
+                        <motion.div
+                          key={idx}
+                          initial={{ opacity: 0, y: 30 }}
+                          whileInView={{ opacity: 1, y: 0 }}
+                          viewport={{ once: true, margin: "-50px" }}
+                          transition={{ delay: 0.1, duration: 0.5 }}
+                          className="w-full flex flex-col gap-5 sm:gap-6"
+                        >
+                          {/* Day Header */}
+                          <div className="flex flex-col gap-1 border-b border-border/50 pb-3 sm:pb-4 w-full">
+                            <h4 className="text-xl sm:text-2xl font-black text-foreground tracking-tight leading-snug">
+                              {day.dayStr.replace(/[*#]/g, '').trim()}
+                            </h4>
+                            {day.title && (
+                              <p className="text-base md:text-lg font-semibold text-primary uppercase tracking-wider">
+                                {day.title.replace(/[*#]/g, '').replace(/^-\s*/, '').trim()}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="w-full">
+                            <ActivityList content={day.content} />
+                          </div>
+                        </motion.div>
+                      ))}
                     </div>
-                  </div>
+                  ) : (
+                    <div className="bg-card/80 backdrop-blur-xl border border-border shadow-2xl rounded-3xl p-6 md:p-8">
+                      <div className="prose prose-sm md:prose-base dark:prose-invert max-w-none prose-headings:text-primary prose-a:text-primary hover:prose-a:text-primary-hover">
+                        <ReactMarkdown>
+                          {aiResult}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

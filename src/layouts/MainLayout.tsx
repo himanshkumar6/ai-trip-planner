@@ -5,6 +5,7 @@ import { AnimatePresence } from 'framer-motion';
 
 export function MainLayout() {
   const location = useLocation();
+  const hideFooter = location.pathname === '/search';
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -14,7 +15,7 @@ export function MainLayout() {
           <Outlet key={location.pathname} />
         </AnimatePresence>
       </main>
-      <Footer />
+      {!hideFooter && <Footer />}
     </div>
   );
 }

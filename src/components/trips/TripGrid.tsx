@@ -11,7 +11,7 @@ interface TripGridProps {
 export function TripGrid({ trips = [], isLoading = false, skeletonCount = 6 }: TripGridProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 xl:gap-8 w-full">
         {Array.from({ length: skeletonCount }).map((_, i) => (
           <div key={i} className="flex flex-col space-y-3">
             <Skeleton className="h-[250px] w-full rounded-xl" />
@@ -37,7 +37,7 @@ export function TripGrid({ trips = [], isLoading = false, skeletonCount = 6 }: T
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 xl:gap-8 w-full">
       {trips.map((trip) => (
         <TripCard key={trip.id} trip={trip} />
       ))}

@@ -4,7 +4,7 @@ import { useAuthStore } from '@/store/index';
 import { Loader2 } from 'lucide-react';
 
 export function AdminRoute({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isAdmin, isInitialized } = useAuthStore();
+  const { user, isInitialized } = useAuthStore();
   const location = useLocation();
 
   if (!isInitialized) {
@@ -15,11 +15,11 @@ export function AdminRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (!isAdmin) {
+  if (user.role !== 'admin') {
     return <Navigate to="/dashboard" replace />;
   }
 

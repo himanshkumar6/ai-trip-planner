@@ -18,8 +18,9 @@ import { Profile } from '@/pages/Dashboard/Profile';
 import { GenerateTrip } from '@/pages/Dashboard/Generate';
 import { MyTrips } from '@/pages/Dashboard/MyTrips';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
-import { AdminDashboard } from '@/pages/Admin';
+import { AdminDashboard, AddTrip, ManageTrips, EditTrip } from '@/pages/Admin';
 import { Checkout } from '@/pages/Checkout';
+import { AdminLayout } from '@/layouts/AdminLayout';
 
 import { About } from '@/pages/About';
 import { Careers } from '@/pages/Careers';
@@ -92,9 +93,15 @@ export const router = createBrowserRouter([
         path: 'admin',
         element: (
           <AdminRoute>
-            <AdminDashboard />
+            <AdminLayout />
           </AdminRoute>
         ),
+        children: [
+          { index: true, element: <AdminDashboard /> },
+          { path: 'add-trip', element: <AddTrip /> },
+          { path: 'manage-trips', element: <ManageTrips /> },
+          { path: 'edit-trip/:id', element: <EditTrip /> },
+        ],
       },
     ],
   },

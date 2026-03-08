@@ -19,6 +19,8 @@ export interface Trip {
   imageUrl: string;
   description?: string;
   itinerary?: string[];
+  category?: string;
+  attractions?: string[];
 }
 
 export interface Review {

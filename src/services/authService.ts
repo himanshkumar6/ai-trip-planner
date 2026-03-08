@@ -67,29 +67,32 @@ export const setupAuthListener = () => {
       return;
     }
 
-    // ✅ Immediately unblock UI
-    const basicUser: AuthUser = {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email,
-      displayName: firebaseUser.displayName || "Traveler",
-      photoURL: firebaseUser.photoURL,
-      role: "user",
-    };
+    try {
+      // ✅ Await the role and profile sync before unblocking the UI so route guards have absolute certainty
+      const enrichedData = await syncUserToFirestore(firebaseUser);
+      
+      const basicUser: AuthUser = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: enrichedData?.name || firebaseUser.displayName || "Traveler",
+        photoURL: enrichedData?.avatar || firebaseUser.photoURL,
+        role: (enrichedData?.role as 'user' | 'admin') || 'user',
+      };
 
-    setUser(basicUser);
-    setInitialized(true);
-
-    // 🔥 Background Firestore sync (Strictly NON-BLOCKING)
-    syncUserToFirestore(firebaseUser).then((enrichedData) => {
-      if (enrichedData) {
-        setUser({
-          ...basicUser,
-          displayName: enrichedData.name || basicUser.displayName,
-          photoURL: enrichedData.avatar || basicUser.photoURL,
-          role: (enrichedData.role as 'user' | 'admin') || "user",
-        });
-      }
-    }).catch(err => console.warn("Background sync failed:", err));
+      setUser(basicUser);
+      setInitialized(true);
+    } catch (err) {
+      console.warn("Background sync failed:", err);
+      // Fallback
+      setUser({
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || "Traveler",
+        photoURL: firebaseUser.photoURL,
+        role: "user",
+      });
+      setInitialized(true);
+    }
   });
 };
 
